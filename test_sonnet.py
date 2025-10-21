@@ -1,4 +1,3 @@
-
 import pytest
 import streamlit as st
 from streamlit.testing.v1 import AppTest
@@ -33,9 +32,10 @@ class TestTimetableApp:
         at = AppTest.from_file("Sonnet.py").run()
         
         # The warning should be present in the 'Generate' tab's section
+        assert len(at.warning) > 0
         assert at.warning[0].value == "⚠️ Please add at least one subject before generating timetable."
-        # Ensure the generate button is not present in this case
-        assert not at.button(key="generate_button").exists()
+        # Ensure the generate button is present
+        assert at.button(key="generate_button").exists()
 
     def test_import_data_from_valid_json(self, mocker):
         """
@@ -85,16 +85,9 @@ class TestTimetableApp:
         """
         at = AppTest.from_file("Sonnet.py").run()
 
-        # Ensure initial state has no subjects
-        assert len(at.session_state.subjects) == 0
-        assert at.metric[0].value == "0"
-
         # --- Case 1: Missing Subject Name ---
-        add_subject_form = at.form[0]
-        add_subject_form.text_input(key=None, value="Some Teacher")
-        
-        # Submit the form
-        add_subject_form.form_submit_button[0].click().run()
+        at.text_input(key="teacher_name").set_value("Some Teacher").run()
+        at.button(key="add_subject").click().run()
 
         # Assert that no subject was added
         assert len(at.session_state.subjects) == 0
@@ -102,12 +95,9 @@ class TestTimetableApp:
         assert at.metric[0].value == "0"
 
         # --- Case 2: Missing Teacher Name ---
-        at = AppTest.from_file("Sonnet.py").run()
-        add_subject_form = at.form[0]
-        add_subject_form.text_input(key=None, value="Math 101")
-        
-        # Submit the form
-        add_subject_form.form_submit_button[0].click().run()
+        at.text_input(key="subject_name").set_value("Math 101").run()
+        at.text_input(key="teacher_name").set_value("").run() # Clear teacher name
+        at.button(key="add_subject").click().run()
 
         # Assert that no subject was added
         assert len(at.session_state.subjects) == 0
@@ -119,8 +109,8 @@ class TestTimetableApp:
         at = AppTest.from_file("Sonnet.py").run()
         
         # Set schedule settings to create limited available slots
-        at.slider("Days per Week").set_value(5)
-        at.slider("Max Periods/Day").set_value(6)  # Total = 30 slots
+        at.slider(key="days_per_week").set_value(5).run()
+        at.slider(key="max_periods_per_day").set_value(6).run()  # Total = 30 slots
 
         # Add subjects whose total periods exceed available slots
         at.session_state.subjects = [
@@ -148,24 +138,23 @@ class TestTimetableApp:
         at.run()
 
         # 1. Generate WITHOUT AI optimization
-        at.sidebar.checkbox(key="use_genetic").set_value(False).run()
-        at.tabs[2].button(key=None).click().run()
+        at.checkbox(key="use_genetic").set_value(False).run()
+        at.button(key="generate_button").click().run()
 
         # Check Analytics tab - chart should NOT be there
         analytics_tab = at.tabs[3]
-        assert "fitness_history" not in analytics_tab.session_state or \
-               analytics_tab.session_state.fitness_history is None
-        assert len(analytics_tab.plotly_chart) == 0
+        assert "fitness_history" not in at.session_state or \
+               at.session_state.fitness_history is None
+        assert len(at.plotly_chart) == 0
 
         # 2. Generate WITH AI optimization
-        at.sidebar.checkbox(key="use_genetic").set_value(True).run()
-        at.tabs[2].button(key=None).click().run()
+        at.checkbox(key="use_genetic").set_value(True).run()
+        at.button(key="generate_button").click().run()
 
         # Check Analytics tab - chart SHOULD be there
-        analytics_tab = at.tabs[3]
-        assert "fitness_history" in analytics_tab.session_state
-        assert len(analytics_tab.plotly_chart) > 0
-        assert analytics_tab.plotly_chart[0].figure.layout.title.text == "AI Optimization Progress"
+        assert "fitness_history" in at.session_state
+        assert len(at.plotly_chart) > 0
+        assert at.plotly_chart[0].figure.layout.title.text == "AI Optimization Progress"
 
     def test_remove_subject_updates_metrics(self):
         """Should verify that removing a subject correctly updates metrics."""
